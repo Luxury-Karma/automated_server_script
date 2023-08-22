@@ -1,129 +1,52 @@
 import json
-import subprocess
-import re
-import requests
 import logging
-import argparse
-import docker
+import requests
+
+
+def get_server_setting(file_path):
+    """Load server settings from a specified JSON file.
+
+    Args:
+        file_path (str): Path to the JSON file containing server settings.
+
+    Returns:
+        dict: Server settings loaded from the file.
+    """
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+    return data
 
 
 def get_public_ip():
+    """Fetch the public IP of the server using an external service.
+
+    Returns:
+        str: The public IP address if successful, None otherwise.
+    """
     try:
-        answer = requests.get('https://httpbin.org/ip')
-        return answer
-    except:
-        logging.error("Failed to retrieve public IP")
+        response = requests.get('https://httpbin.org/ip')
+        return response.json()['origin'].split(',')[0]
+    except Exception as e:
+        logging.error(f"Failed to retrieve public IP. Error: {e}")
         return None
 
 
-def get_server_setting(path: str) -> dict:
-    try:
-        with open(path, 'r') as setting:
-            return json.load(setting)
-    except:
-        logging.error('Failed to open server settings. Initialising the settings')
-        init_setting: dict = {
-            'server_public_ip': get_public_ip() if get_public_ip() else '169.254.0.1',
-            'server_local_ip': '10.0.0.1',
-            'vpn_container_name': 'OpenVPN_server',
-            'server_time_to_look': 3600,
-            'server_ovpn': 'path/to/file',
-        }
-        with open(path, 'w') as setting:
-            json.dump(init_setting, setting)
-        return init_setting
+def look_ip(file_path):
+    """Check if the current public IP matches the IP saved in the settings.
 
+    Args:
+        file_path (str): Path to the JSON file containing server settings.
 
-def set_server_setting(value_to_change: str, value: any, path:str) -> None:
-    try:
-        with open(path, 'rw') as file:
-            data = json.load(file)
-            data[value_to_change] = value
-    except Exception:
-        logging.error("Failed to change server data")
-
-
-def create_vpn_container(container_emplacement: str, port: str, user_name: str, user_password: str,
-                         server_local_ip: str, server_name: str):
-    client = docker.from_env()
-
-    # Pull the required image
-    client.images.pull('kylemanna/openvpn')
-
-    # Volume mapping
-    volume_mapping = {container_emplacement: {'bind': '/etc/openvpn', 'mode': 'rw'}}
-
-    # Port mapping
-    ports = {f'{port}/udp': port}
-
-    # Create the container
-    container = client.containers.create(
-        image='kylemanna/openvpn',
-        name=server_name,
-        volumes=volume_mapping,
-        ports=ports,
-        cap_add=["NET_ADMIN"],
-        restart_policy={"Name": "always"}
-    )
-
-    # Start the container
-    container.start()
-
-    print(f'{server_name} created and started.')
-
-
-# Generating a new certificate with a password
-def generate_certificate(client_name):
-    cmd = [
-        "docker", "run",
-        "-v", "~/openvpn-data:/etc/openvpn",
-        "--rm", "-it",
-        "kylemanna/openvpn",
-        "easyrsa", "build-client-full",
-        client_name, "nopass"
-    ]
-    subprocess.run(cmd)
-
-
-# Retrieving the certificate
-def get_certificate(client_name):
-    cmd = [
-        "docker", "run",
-        "-v", "~/openvpn-data:/etc/openvpn",
-        "--rm",
-        "kylemanna/openvpn",
-        "ovpn_getclient",
-        client_name
-    ]
-    with open(f"{client_name}.ovpn", "w") as f:
-        subprocess.run(cmd, stdout=f)
-
-
-def update_ovpn_file(filename, new_ip):
-    """Replace the IP address in the .ovpn file with the new IP."""
-    with open(filename, 'r') as file:
-        data = file.read()
-
-    # Match the IP in the "remote" line followed by a port (e.g., 1194)
-    data = re.sub(r'(?<=remote\s)(\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b)\s1194', f'{new_ip} 1194', data)
-
-    with open(filename, 'w') as file:
-        file.write(data)
-
-
-def look_ip(path_to_setting: str) -> bool:
+    Returns:
+        bool: True if the IPs match, False otherwise.
     """
-    Look if we need to change the VPN configuration or not
-    :param path_to_setting: The path where the data of the VPN are stocked
-    :return: True if the server is ok False if the server need update settings
-    """
-    current_setting = get_server_setting(path_to_setting)  # look if there was a modification while running
-    # Get the VPN container
-
-    current_public_ip = get_public_ip()
-    if current_setting['server_public_ip'] != current_public_ip:
-        # Need to create new certificate for the new IP address
-        update_ovpn_file(current_setting['server_ovpn'], current_public_ip)
-        set_server_setting('server_public_ip', current_public_ip, path_to_setting)  # Set the new server settings
+    current_ip = get_public_ip()
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+    if data['server_ip'] == current_ip:
+        return True
+    else:
+        data['server_ip'] = current_ip
+        with open(file_path, 'w') as file:
+            json.dump(data, file)
         return False
-    return True

@@ -1,65 +1,61 @@
 import json
-import smtplib
 import logging
-from email import encoders
+import smtplib
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email import encoders
 
 
-def send_email(subject, body, to_email,server_email: str, server_password:str, attachment_path=None):
+def get_email_settings(file_path):
+    """Load email settings from a specified JSON file.
+
+    Args:
+        file_path (str): Path to the JSON file containing email settings.
+
+    Returns:
+        dict: Email settings loaded from the file.
+    """
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+    return data
+
+
+def send_email(subject, body, to_email, server_email, server_password, attachment_path=None):
+    """Send an email using the specified settings and content.
+
+    Args:
+        subject (str): Subject of the email.
+        body (str): Body/content of the email.
+        to_email (str): Recipient's email address.
+        server_email (str): Sender's email address.
+        server_password (str): Password for the sender's email account.
+        attachment_path (str, optional): Path to a file to be attached to the email. Defaults to None.
+
+    Returns:
+        None
+    """
     try:
-        """
-        Main usage will be to send the new login files to the user once the docker is created
-        :param subject: what the email is about
-        :param body: the text inside the email
-        :param to_email: to who it is send
-        :param server_email: what is the server's email
-        :param server_password: what is the server's email's password
-        :param attachment_path: where is the file to send
-        :return: None
-        """
-        # Email & Password used for sending the email
-        email_user = server_email  # need to be a gmail in this exemple
-        email_password = server_password
-
-        # Setting up the MIME
         msg = MIMEMultipart()
-        msg['From'] = email_user
+        msg['From'] = server_email
         msg['To'] = to_email
         msg['Subject'] = subject
 
-        # Body of the email
         msg.attach(MIMEText(body, 'plain'))
 
-        # Attachment
         if attachment_path:
             filename = attachment_path.split("/")[-1]
             attachment = open(attachment_path, 'rb')
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(attachment.read())
             encoders.encode_base64(part)
-            part.add_header('Content-Disposition', "attachment; filename= "+filename)
+            part.add_header('Content-Disposition', f"attachment; filename={filename}")
             msg.attach(part)
 
-        # Start the server and send the email
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login(email_user, email_password)
-        server.sendmail(email_user, to_email, msg.as_string())
+        server.login(server_email, server_password)
+        server.sendmail(server_email, to_email, msg.as_string())
         server.quit()
     except Exception as e:
-        logging.error(f'The email for {to_email} could not be sent, error {e}')
-
-
-def set_email_setting(path_to_file: str, email: str, e_password : str):
-    setting = {
-        'server_email': email,
-        'server_email_password': e_password,
-        'server_email_client': []
-    }
-
-
-def get_email_settings(path_to_file: str) -> dict:
-    with open(path_to_file, 'r') as f:
-        return json.load(f)
+        logging.error(f'The email for {to_email} could not be sent. Error: {e}')
