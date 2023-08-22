@@ -55,7 +55,8 @@ def send_email(subject, body, to_email,server_email: str, server_password:str, a
 def set_email_setting(path_to_file: str, email: str, e_password : str):
     setting = {
         'server_email': email,
-        'server_email_password': e_password
+        'server_email_password': e_password,
+        'server_email_client': []
     }
 
 

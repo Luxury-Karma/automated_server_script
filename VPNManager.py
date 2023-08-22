@@ -5,7 +5,6 @@ import requests
 import logging
 import argparse
 import docker
-import time
 
 
 def get_public_ip():
@@ -28,7 +27,7 @@ def get_server_setting(path: str) -> dict:
             'server_local_ip': '10.0.0.1',
             'vpn_container_name': 'OpenVPN_server',
             'server_time_to_look': 3600,
-            'server_ovpn': 'path/to/file'
+            'server_ovpn': 'path/to/file',
         }
         with open(path, 'w') as setting:
             json.dump(init_setting, setting)
@@ -111,36 +110,20 @@ def update_ovpn_file(filename, new_ip):
     with open(filename, 'w') as file:
         file.write(data)
 
-def helper():
-    parser = argparse.ArgumentParser(description='I am a homemade Server Container Manager')
-    parser.add_argument('-d', '-data', type=str, help='The path to the json containing the data in a json format')
-    parser.add_argument('-c', '-create', type=str, help='Create the data in a json format')
-    return parser.parse_args()
 
+def look_ip(path_to_setting: str) -> bool:
+    """
+    Look if we need to change the VPN configuration or not
+    :param path_to_setting: The path where the data of the VPN are stocked
+    :return: True if the server is ok False if the server need update settings
+    """
+    current_setting = get_server_setting(path_to_setting)  # look if there was a modification while running
+    # Get the VPN container
 
-def main():
-
-    # Set up the helper
-    args = helper()
-
-    # Setup logging
-    logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    if args.data:
-        while True:
-            current_setting = get_server_setting(args.data)  # look if there was a modification while running
-            # Get the VPN container
-
-            current_public_ip = get_public_ip()
-            if current_setting['server_public_ip'] != current_public_ip:
-                # Need to create new certificate for the new IP address
-                update_ovpn_file(current_setting['server_ovpn'], current_public_ip)
-                set_server_setting('server_public_ip', current_public_ip, args.data)  # Set the new server settings
-
-            # Get the FPT Container
-            time.sleep(current_setting['server_time_to_look'])  # make the script sleep
-
-
-if __name__ == '__main__':
-    main()
-
+    current_public_ip = get_public_ip()
+    if current_setting['server_public_ip'] != current_public_ip:
+        # Need to create new certificate for the new IP address
+        update_ovpn_file(current_setting['server_ovpn'], current_public_ip)
+        set_server_setting('server_public_ip', current_public_ip, path_to_setting)  # Set the new server settings
+        return False
+    return True
