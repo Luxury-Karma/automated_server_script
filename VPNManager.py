@@ -48,5 +48,6 @@ def look_ip(file_path):
     else:
         data['server_ip'] = current_ip
         with open(file_path, 'w') as file:
+            data['server_ip'] = current_ip
             json.dump(data, file)
         return False
