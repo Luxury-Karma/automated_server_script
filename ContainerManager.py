@@ -43,6 +43,72 @@ def is_container_running(container_name_or_id):
         return False
 
 
+def server_wait(container_data_path: str):
+    with open(container_data_path, 'r') as c:
+        data = json.load(c)
+        time.sleep(int(data['time']))
+
+
+def data_verification(path_to_data: str, type_of_data: str):
+    try:
+        with open(path_to_data, 'r') as file:
+            if not json.load(file):
+                logging.error(f'{type_of_data} FILE NOT FOUND STOPING PROGRAM')
+                exit()
+    except:
+        logging.error(f'COULD NOT OPEN {type_of_data} DATA. CLOSING PROGRAM')
+        exit()
+
+
+def server_comunication(path_to_email_data: str, path_to_vpn_data: str):
+    email_data = Server_communication.get_email_settings(path_to_email_data)
+    for e in email_data['server_email_client']:
+        Server_communication.send_email(
+            subject='OpenVPN Luxury Ip Change',
+            body='Hello, This is the OpenVPN server of Luxury'
+                 'changing IP. Please update your OpenVPN',
+            to_email=e,
+            server_email=email_data['server_email'],
+            server_password=email_data['server_email_password'],
+            attachment_path=VPNManager.get_server_setting(path_to_vpn_data)['server_ovpn']
+        )
+
+
+def vpn_data_creation_process(path_to_file: str):
+    VPN = {
+        'name': input('Enter the name of the docker: '),
+        'server_ovpn': input('Enter the path of the server ovpn file: '),
+        'client_ovpn': input('Enter the path of the client ovpn file: '),
+        'server_ip': VPNManager.get_public_ip() or '169.254.0.1'
+    }
+    with open(path_to_file, 'w') as outfile:
+        json.dump(VPN, outfile)
+
+
+def server_email_creation_proces(path_to_file: str):
+    client = []
+    while True:
+        user_input = input('Enter an email (or -q to quit): ')
+        if user_input.lower() == '-q':
+            break
+        client.append(user_input)
+    Email = {
+        'server_email': input('Enter the server email: '),
+        'server_email_password': input('Enter the password of the server email: '),
+        'server_email_client': client
+    }
+    with open(path_to_file, 'w') as outfile:
+        json.dump(Email, outfile)
+
+
+def server_container_data_creation_process(path_to_file: str):
+    container = {
+        'time': input('Enter the time (in seconds) to sleep between checks: ')
+    }
+    with open(path_to_file, 'w') as outfile:
+        json.dump(container, outfile)
+
+
 def main():
     """Main execution function for the server container manager.
 
@@ -54,58 +120,36 @@ def main():
 
     # Check for VPN settings file existence, and create if not present
     if not os.path.exists(args.VPNdata):
-        VPN = {
-            'name': input('Enter the name of the docker: '),
-            'server_ovpn': input('Enter the path of the server ovpn file: '),
-            'client_ovpn': input('Enter the path of the client ovpn file: '),
-            'server_ip': VPNManager.get_public_ip() or '169.254.0.1'
-        }
-        with open(args.VPNdata, 'w') as outfile:
-            json.dump(VPN, outfile)
+        vpn_data_creation_process(args.VPNdata)
 
     # Check for email settings file existence, and create if not present
     if not os.path.exists(args.Emaildata):
-        client = []
-        while True:
-            user_input = input('Enter an email (or -q to quit): ')
-            if user_input.lower() == '-q':
-                break
-            client.append(user_input)
-        Email = {
-            'server_email': input('Enter the server email: '),
-            'server_email_password': input('Enter the password of the server email: '),
-            'server_email_client': client
-        }
-        with open(args.Emaildata, 'w') as outfile:
-            json.dump(Email, outfile)
+        server_email_creation_proces(args.Emaildata)
 
     # Check for container settings file existence, and create if not present
     if not os.path.exists(args.Containerdata):
-        Container = {
-            'time': input('Enter the time (in seconds) to sleep between checks: ')
-        }
-        with open(args.Containerdata, 'w') as outfile:
-            json.dump(Container, outfile)
+        server_container_data_creation_process(args.Containerdata)
 
     # Main loop for checking the container status and IP
-    while True:
-        if is_container_running(VPNManager.get_server_setting(args.VPNdata)['name']):
-            is_ip_ok = VPNManager.look_ip(args.VPNdata)
-            if not is_ip_ok:
-                email_data = Server_communication.get_email_settings(args.Emaildata)
-                for e in email_data['server_email_client']:
-                    Server_communication.send_email(
-                        subject='OpenVPN Luxury Ip Change',
-                        body='Hello, This is the OpenVPN server of Luxury'
-                             'changing IP. Please update your OpenVPN',
-                        to_email=e,
-                        server_email=email_data['server_email'],
-                        server_password=email_data['server_email_password'],
-                        attachment_path=VPNManager.get_server_setting(args.VPNdata)['server_ovpn']
-                    )
-        with open(args.Containerdata, 'r') as c:
-            data = json.load(c)
-            time.sleep(int(data['time']))
+    while True:  # running process
+
+        if not is_container_running(VPNManager.get_server_setting(args.VPNdata)['name']):
+            time.sleep(300)
+
+        is_ip_ok = VPNManager.look_ip(args.VPNdata)
+
+        if is_ip_ok is None:
+            data_verification(args.VPNdata, 'VPN')
+            time.sleep(180)
+            pass
+
+        if is_ip_ok:
+            server_wait(args.Containerdata)
+            pass
+
+        server_comunication(args.Containerdata, args.VPNdata)
+
+        server_wait(args.Containerdata)
 
 
 if __name__ == "__main__":

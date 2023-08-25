@@ -1,6 +1,9 @@
 import json
 import logging
+import time
+
 import requests
+import ipaddress
 
 
 def get_server_setting(file_path):
@@ -31,6 +34,33 @@ def get_public_ip():
         return None
 
 
+def ip_comparison(file_path: str, current_ip: str):
+    try:
+        if not ipaddress.ip_address(current_ip) or current_ip is None:
+            return None
+
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+        if data is None:
+            logging.error('No file for the server IP')
+            return None
+
+        if data['server_ip'] == current_ip:
+            return True
+
+        data['server_ip'] = current_ip
+
+        with open(file_path, 'w') as file:
+            data['server_ip'] = current_ip
+            json.dump(data, file)
+            logging.info('Changing IP address')
+
+        return False
+    except:
+        logging.error('Ip looking section crashed')
+        return None
+
+
 def look_ip(file_path):
     """Check if the current public IP matches the IP saved in the settings.
 
@@ -41,13 +71,6 @@ def look_ip(file_path):
         bool: True if the IPs match, False otherwise.
     """
     current_ip = get_public_ip()
-    with open(file_path, 'r') as file:
-        data = json.load(file)
-    if data['server_ip'] == current_ip:
-        return True
-    else:
-        data['server_ip'] = current_ip
-        with open(file_path, 'w') as file:
-            data['server_ip'] = current_ip
-            json.dump(data, file)
-        return False
+    return ip_comparison(file_path, current_ip)
+
+
